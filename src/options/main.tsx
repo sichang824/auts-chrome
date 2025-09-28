@@ -742,7 +742,7 @@ function OptionsApp() {
             <div className="flex items-center gap-1 ml-2 pl-2 border-l">
               <Button variant="ghost" size="sm" className="gap-2" asChild>
                 <a
-                  href="https://github.com/anthropics/auts"
+                  href="https://github.com/sichang824/auts-chrome.git"
                   target="_blank"
                   rel="noopener noreferrer"
                   title="查看源码"
