@@ -16,7 +16,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: resolve(rootDir, "../dist/extension"),
+    outDir: resolve(rootDir, "./dist/extension"),
     emptyOutDir: true,
     rollupOptions: {
       input: {
