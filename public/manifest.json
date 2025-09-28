@@ -1,0 +1,36 @@
+{
+  "name": "Auts",
+  "description": "Auto-inject local userscripts; UI built with Vite + React.",
+  "manifest_version": 3,
+  "version": "0.1.0",
+  "permissions": [
+    "storage",
+    "scripting",
+    "activeTab",
+    "userScripts"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Userscript Manager"
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "bridge.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  }
+}
