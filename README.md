@@ -2,7 +2,7 @@
 
 This package contains the Chrome extension for Auts. It is built with Vite, React, and TypeScript, and provides the popup, options page, and background service worker used by the application.
 
-![Header](./header.webp)
+![Header](./assets/header.webp)
 
 ### Features
 
@@ -10,6 +10,13 @@ This package contains the Chrome extension for Auts. It is built with Vite, Reac
 - Background service worker for extension logic and storage
 - Shared utility library and shadcn/ui components
 - Production build outputs an unpacked extension folder
+
+### Screenshots
+
+![Header](./assets/image.png)
+![Header](./assets/image1.png)
+![Header](./assets/image2.png)
+![Header](./assets/image3.png)
 
 ### Prerequisites
 
