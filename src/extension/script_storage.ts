@@ -3,54 +3,21 @@ export const AUTS_SCRIPTS_KEY = "auts_scripts";
 import { parseUserScriptMeta } from "../lib/userscript_parser";
 import { normalizePatterns } from "../lib/url_matcher";
 import { getAllSubscriptions } from "./subscription_storage";
-import type { ServerSubscription, ServerScript } from "../lib/types";
+import type { AutsPlugin, ServerSubscription, ServerScript, UserScript, UserscriptMeta } from "./types";
 
-export interface AutsInlineSource {
-  content: string;
-}
-
-export interface AutsLocalSource {
-  entryFile: string;
-  files: Record<string, string>;
-}
-
-export interface AutsPlugin {
-  id: string;
-  name: string;
-  enabled: boolean;
-  sourceType: "inline" | "local" | "url" | "server";
-  createdAt?: number;
-  updatedAt?: number;
-  matches?: string[];
-  excludes?: string[];
-  inline?: AutsInlineSource;
-  local?: AutsLocalSource;
-  // Optional fields persisted by options UI for remote sources
-  url?: { href: string; etag?: string } | string;
-  server?: { scriptId: string; licenseKey?: string };
-  cache?: {
-    version?: string;
-    etag?: string;
-    sha256?: string;
-    signature?: string;
-    lastFetchedAt?: number;
-    expiresAt?: number;
+// Local helper to build default metadata from code
+function buildMetadataFromCode(code: string): UserscriptMeta {
+  const meta = parseUserScriptMeta(code || "");
+  return {
+    matches: Array.isArray(meta.matches) ? meta.matches : [],
+    excludes: Array.isArray(meta.excludes) ? meta.excludes : [],
+    grants: Array.isArray(meta.grants) ? meta.grants : [],
+    requires: Array.isArray(meta.requires) ? meta.requires : [],
+    name: meta.name,
+    version: meta.version,
+    description: meta.description,
+    author: meta.author,
   };
-}
-
-export interface UserScript {
-  id: string;
-  name: string;
-  enabled: boolean;
-  matches: string[];
-  excludes: string[];
-  code: string;
-  // For popup labeling and handling
-  sourceType: "inline" | "url" | "server";
-  // Track origin for toggling and navigation
-  origin:
-    | { type: "plugin"; pluginId: string }
-    | { type: "subscription"; subscriptionId: string; serverScriptId: string };
 }
 
 /**
@@ -90,7 +57,6 @@ export function mapPluginToUserScript(
   if (!plugin) return null;
   const id = plugin.id || generateId();
   const name = plugin.name || id;
-  let matches = Array.isArray(plugin.matches) ? plugin.matches.slice() : [];
 
   // Only support inline and local for now
   let code = "";
@@ -113,35 +79,20 @@ export function mapPluginToUserScript(
     code = "";
   }
 
-  // Merge: parse @match and @exclude from UserScript metadata block and union with explicit fields
-  let excludes: string[] = Array.isArray(plugin.excludes)
-    ? plugin.excludes.slice()
-    : [];
-  if (code) {
-    const meta = parseUserScriptMeta(code);
-    if (meta.matches.length > 0) {
-      const set = new Set<string>(matches);
-      for (const m of meta.matches) set.add(m);
-      matches = Array.from(set);
-    }
-    if (meta.excludes.length > 0) {
-      const set = new Set<string>(excludes);
-      for (const e of meta.excludes) set.add(e);
-      excludes = Array.from(set);
-    }
-  }
+  if (!code) return null;
 
-  if (!code || !matches.length) return null;
+  const metadata = buildMetadataFromCode(code);
+  if (!metadata.matches || metadata.matches.length === 0) return null;
 
   return {
     id,
     name,
     enabled: Boolean(plugin.enabled),
-    matches: normalizePatterns(matches),
-    excludes: normalizePatterns(excludes),
-    code,
-    // Treat local as inline for UI purposes
     sourceType: plugin.sourceType === "url" ? "url" : "inline",
+    code,
+    metadata: {
+      ...metadata,
+    },
     origin: { type: "plugin", pluginId: id },
   };
 }
@@ -215,34 +166,35 @@ async function mapUrlPlugin(plugin: AutsPlugin): Promise<UserScript | null> {
   try {
     const href = typeof plugin.url === "string" ? plugin.url : plugin.url?.href;
     if (!href) return null;
-    const resp = await fetch(href, { cache: "no-store" });
-    if (!resp.ok) return null;
-    const text = await resp.text();
-    // Merge metadata
-    let matches = Array.isArray(plugin.matches) ? plugin.matches.slice() : [];
-    let excludes: string[] = Array.isArray(plugin.excludes)
-      ? plugin.excludes.slice()
-      : [];
-    const meta = parseUserScriptMeta(text || "");
-    if (meta.matches && meta.matches.length) {
-      const set = new Set<string>(matches);
-      for (const m of meta.matches) set.add(m);
-      matches = Array.from(set);
+
+    // Prefer cached code to allow offline fallback
+    let text = plugin.cache?.code || "";
+
+    // If no cached code exists, try a best-effort fetch once
+    if (!text) {
+      try {
+        const resp = await fetch(href, { cache: "no-store" });
+        if (resp.ok) {
+          text = await resp.text();
+        }
+      } catch (_e) {
+        // Ignore; will fall back to empty
+      }
     }
-    if (meta.excludes && meta.excludes.length) {
-      const set = new Set<string>(excludes);
-      for (const e of meta.excludes) set.add(e);
-      excludes = Array.from(set);
-    }
-    if (!matches.length) return null;
+
+    if (!text) return null;
+
+    const metadata = buildMetadataFromCode(text || "");
+    if (!metadata.matches || metadata.matches.length === 0) return null;
     return {
       id: plugin.id || generateId(),
       name: plugin.name || plugin.id,
       enabled: Boolean(plugin.enabled),
-      matches: normalizePatterns(matches),
-      excludes: normalizePatterns(excludes),
-      code: text,
       sourceType: "url",
+      code: text,
+      metadata: {
+        ...metadata,
+      },
       origin: { type: "plugin", pluginId: plugin.id || "" },
     };
   } catch (_e) {
@@ -256,7 +208,6 @@ async function mapUrlPlugin(plugin: AutsPlugin): Promise<UserScript | null> {
 export async function addScript(
   script: Partial<UserScript> & {
     name: string;
-    matches: string[];
     code: string;
   }
 ): Promise<UserScript> {
@@ -269,7 +220,6 @@ export async function addScript(
     sourceType: "inline",
     createdAt: Date.now(),
     updatedAt: Date.now(),
-    matches: Array.isArray(script.matches) ? script.matches : [],
     inline: { content: String(script.code || "") },
   };
   plugins.push(plugin);
@@ -281,10 +231,9 @@ export async function addScript(
       id,
       name: plugin.name,
       enabled: plugin.enabled,
-      matches: plugin.matches || [],
-      excludes: [],
-      code: plugin.inline?.content || "",
       sourceType: "inline",
+      code: plugin.inline?.content || "",
+      metadata: buildMetadataFromCode(plugin.inline?.content || ""),
       origin: { type: "plugin", pluginId: id },
     };
   }
@@ -305,9 +254,6 @@ export async function updateScript(
   const next: AutsPlugin = {
     ...prev,
     name: updatedScript.name != null ? updatedScript.name : prev.name,
-    matches: Array.isArray(updatedScript.matches)
-      ? updatedScript.matches
-      : prev.matches,
     enabled:
       typeof updatedScript.enabled === "boolean"
         ? updatedScript.enabled
@@ -361,22 +307,23 @@ async function getSubscriptionsForScripts(): Promise<ServerSubscription[]> {
  */
 function mapServerScriptToUserScript(script: ServerScript, subscription: ServerSubscription): UserScript | null {
   if (!script.code) return null;
-  
-  // Parse metadata from script code
-  const meta = parseUserScriptMeta(script.code);
-  
-  // Use metadata matches if available, otherwise default pattern
-  const matches = meta.matches.length > 0 ? meta.matches : ["*://*/*"];
-  const excludes = meta.excludes || [];
-  
+
+  const metadata = buildMetadataFromCode(script.code);
+  const normalized: UserscriptMeta = {
+    ...metadata,
+    matches: normalizePatterns(metadata.matches),
+    excludes: normalizePatterns(metadata.excludes || []),
+  };
+
+  if (!normalized.matches || normalized.matches.length === 0) return null;
+
   return {
     id: `${subscription.id}_${script.id}`,
-    name: meta.name || script.id,
+    name: metadata.name || script.id,
     enabled: script.enabled,
-    matches: normalizePatterns(matches),
-    excludes: normalizePatterns(excludes),
     code: script.code,
     sourceType: "server",
+    metadata: normalized,
     origin: { type: "subscription", subscriptionId: subscription.id, serverScriptId: script.id },
   };
 }
@@ -386,4 +333,83 @@ function mapServerScriptToUserScript(script: ServerScript, subscription: ServerS
  */
 export function generateId(): string {
   return "script_" + Date.now() + "_" + Math.random().toString(36).substring(2, 11);
+}
+
+/**
+ * Refresh cached code for URL plugins. If network fails, keep existing cache.
+ */
+export async function refreshUrlPluginsAuto(): Promise<void> {
+  const plugins = await getAllAutsPlugins();
+  let changed = false;
+  for (const p of plugins) {
+    try {
+      if (!p || p.sourceType !== "url") continue;
+      const href = typeof p.url === "string" ? p.url : p.url?.href;
+      if (!href) continue;
+
+      const headers: Record<string, string> = {};
+      const prevEtag = typeof p.url === "object" ? p.url?.etag : undefined;
+      if (prevEtag) headers["If-None-Match"] = prevEtag;
+
+      const resp = await fetch(href, { cache: "no-store", headers });
+      if (resp.status === 304) {
+        // Not modified: only bump lastFetchedAt in memory, no storage write
+        continue;
+      }
+      if (!resp.ok) continue;
+
+      const text = await resp.text();
+      const etag = resp.headers.get("ETag") || undefined;
+
+      // Decide change by comparing code and metadata snapshot instead of per-field checks
+      const prevCode = p.cache?.code || "";
+      const prevMeta = parseUserScriptMeta(prevCode);
+      const nextMeta = parseUserScriptMeta(text || "");
+      const keyOf = (m: ReturnType<typeof parseUserScriptMeta>): string => {
+        const mm = (m.matches || []).slice().sort();
+        const ex = (m.excludes || []).slice().sort();
+        return [m.name || "", m.version || "", m.description || "", `m:${mm.join(",")}`, `x:${ex.join(",")}`].join("|");
+      };
+      const codeChanged = prevCode !== text;
+      const metaChanged = keyOf(prevMeta) !== keyOf(nextMeta);
+
+      if (codeChanged || metaChanged) {
+        // Apply scalar metadata via object spread/merge (only defined values)
+        const scalarPatch: Partial<AutsPlugin> = {
+          ...(nextMeta.name ? { name: nextMeta.name } : {}),
+          ...(nextMeta.version ? { version: nextMeta.version } : {}),
+          ...(nextMeta.description ? { description: nextMeta.description } : {}),
+          ...(nextMeta.author ? { author: nextMeta.author } : {}),
+        };
+        Object.assign(p, scalarPatch);
+        
+
+        // Merge matches/excludes (union) and store raw; normalize happens at mapping
+        if (Array.isArray(nextMeta.matches) && nextMeta.matches.length > 0) {
+          const existing = Array.isArray(p.matches) ? p.matches.slice() : [];
+          const set = new Set<string>(existing);
+          for (const m of nextMeta.matches) set.add(m);
+          p.matches = Array.from(set);
+        }
+        if (Array.isArray(nextMeta.excludes) && nextMeta.excludes.length > 0) {
+          const existing = Array.isArray(p.excludes) ? p.excludes.slice() : [];
+          const set = new Set<string>(existing);
+          for (const e of nextMeta.excludes) set.add(e);
+          p.excludes = Array.from(set) as any;
+        }
+
+        p.cache = { ...(p.cache || {}), code: text, etag, lastFetchedAt: Date.now() };
+        if (typeof p.url === "object") {
+          p.url = { href: p.url.href, etag };
+        }
+        p.updatedAt = Date.now();
+        changed = true;
+      }
+    } catch (_e) {
+      // Ignore individual failures
+    }
+  }
+  if (changed) {
+    await saveAllAutsPlugins(plugins);
+  }
 }

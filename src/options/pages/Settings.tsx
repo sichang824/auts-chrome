@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import type { ThemeMode } from "../store";
+import type { ThemeMode } from "@/extension/types";
 import {
   Settings as SettingsIcon,
   Power,
@@ -21,9 +21,10 @@ import {
   Monitor,
   Globe,
   Eye,
-  EyeOff
+  EyeOff,
+  RefreshCw
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function SettingsPage(props: {
   autsEnabled: boolean;
@@ -37,6 +38,14 @@ export function SettingsPage(props: {
   onDisableAll(): void;
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [autoUpdate, setAutoUpdate] = useState(true);
+
+  // Load auts_auto_update from sync storage
+  useEffect(() => {
+    chrome.storage.sync.get({ auts_auto_update: true }, (d) => {
+      setAutoUpdate(Boolean(d.auts_auto_update));
+    });
+  }, []);
 
   const getThemeIcon = (theme: ThemeMode) => {
     switch (theme) {
@@ -181,6 +190,36 @@ export function SettingsPage(props: {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Auto Update Setting */}
+            {props.autsEnabled && (
+              <div className="mt-4 p-4 bg-muted/30 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                      autoUpdate ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      <RefreshCw className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium text-sm">自动更新远程脚本</h3>
+                      <p className="text-muted-foreground text-xs">在注入前自动拉取 URL 与订阅的最新内容，失败则回退本地缓存</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={autoUpdate}
+                    onCheckedChange={(checked) => {
+                      setAutoUpdate(checked);
+                      chrome.storage.sync.set({ auts_auto_update: checked }, () => {
+                        // Broadcast change
+                        chrome.runtime.sendMessage({ type: 'STATE_CHANGED', source: 'options' });
+                      });
+                    }}
+                    className="data-[state=checked]:bg-emerald-500"
+                  />
+                </div>
               </div>
             )}
 

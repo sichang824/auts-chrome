@@ -3,10 +3,12 @@ import {
   addScript,
   deleteScript,
   getAllScripts,
+  getAllAutsPlugins,
   toggleScript as toggleScriptStorage,
   updateScript,
+  refreshUrlPluginsAuto,
 } from "./script_storage";
-import type { UserScript } from "./script_storage";
+import type { UserScript } from "./types";
 import { urlMatches } from "../lib/url_matcher";
 import { buildJsSourcesFromUserScript } from "../lib/userscript_loader";
 import {
@@ -15,6 +17,7 @@ import {
   unregisterIndicatorForScript,
   performEmergencyStop,
 } from "./visual_indicator";
+import { refreshAllSubscriptionsAuto } from "./subscription_storage";
 
 // Track registered userscripts
 const registeredScripts: Map<string, string> = new Map();
@@ -47,7 +50,11 @@ chrome.runtime.onStartup.addListener(async () => {
 });
 
 // Re-register when scripts or global switch change
+let autoRefreshing = false;
+
+// Avoid reacting to our own automatic refresh writes to prevent loops
 chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (autoRefreshing) return;
   if (
     areaName === "local" &&
     (changes.auts_scripts || changes.auts_subscriptions)
@@ -58,7 +65,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
   if (
     areaName === "sync" &&
-    (changes.auts_enabled || changes.auts_visual_indicator)
+    (changes.auts_enabled || changes.auts_visual_indicator || changes.auts_auto_update)
   ) {
     registerAllUserScripts();
     void updateBadgeForActiveTab();
@@ -87,7 +94,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       handleAddScript(
         message.script as Partial<UserScript> & {
           name: string;
-          matches: string[];
           code: string;
         },
         sendResponse as Send
@@ -156,7 +162,7 @@ async function registerAllUserScripts(): Promise<void> {
 
     const scripts = await getAllScripts();
     for (const script of scripts) {
-      if (script.enabled && script.matches && script.matches.length > 0) {
+      if (script.enabled && script.metadata?.matches && script.metadata.matches.length > 0) {
         await registerUserScript(script, indicatorEnabled);
       }
     }
@@ -192,8 +198,8 @@ async function registerUserScript(
     await chrome.userScripts.register([
       {
         id: scriptId,
-        matches: script.matches,
-        excludeMatches: script.excludes || [],
+        matches: script.metadata.matches,
+        excludeMatches: script.metadata.excludes || [],
         js: jsSources,
         runAt: "document_idle",
         // Cast to the enum because TS type expects ExecutionWorld enum
@@ -207,9 +213,9 @@ async function registerUserScript(
     // eslint-disable-next-line no-console
     console.log(
       "  matches:",
-      script.matches,
+      script.metadata.matches,
       "excludes:",
-      script.excludes || []
+      script.metadata.excludes || []
     );
 
     // Optionally register visual indicator script in isolated world
@@ -256,7 +262,6 @@ async function handleGetScripts(
 async function handleAddScript(
   script: Partial<UserScript> & {
     name: string;
-    matches: string[];
     code: string;
   },
   sendResponse: (response: unknown) => void
@@ -405,7 +410,7 @@ async function countEnabledMatchingForUrl(url: string): Promise<number> {
   try {
     const scripts = await getAllScripts();
     const matching = scripts.filter(
-      (s) => s.enabled && urlMatches(url, s.matches, s.excludes)
+      (s) => s.enabled && urlMatches(url, s.metadata?.matches || [], s.metadata?.excludes || [])
     );
     return matching.length;
   } catch {
@@ -413,13 +418,66 @@ async function countEnabledMatchingForUrl(url: string): Promise<number> {
   }
 }
 
+// Read auto update flag from sync storage (default true)
+async function isAutoUpdateEnabled(): Promise<boolean> {
+  try {
+    const data = await chrome.storage.sync.get({ auts_auto_update: true });
+    return Boolean((data as { auts_auto_update: unknown }).auts_auto_update);
+  } catch (_e) {
+    return true;
+  }
+}
+
+async function maybeRefreshForUrl(url: string): Promise<void> {
+  if (!url) return;
+  const autoUpdate = await isAutoUpdateEnabled();
+  if (!autoUpdate) return;
+
+  // Check if any remote script would match this URL; if none, skip refresh
+  try {
+    const scripts = await getAllScripts();
+    const hasRemoteMatching = scripts.some(
+      (s) => (s.sourceType === "url" || s.sourceType === "server") && s.enabled && urlMatches(url, s.metadata?.matches || [], s.metadata?.excludes || [])
+    );
+    // If no matching userscripts are currently mapped, but there are enabled URL plugins,
+    // we still refresh to allow metadata changes to be picked up.
+    let hasEnabledUrlPlugins = false;
+    const raw = await getAllAutsPlugins();
+    hasEnabledUrlPlugins = raw.some((p) => p && p.sourceType === "url" && p.enabled !== false);
+
+    if (!hasRemoteMatching && !hasEnabledUrlPlugins) {
+      return;
+    }
+  } catch {
+    // If we fail to read scripts, be conservative and skip
+    return;
+  }
+
+  autoRefreshing = true;
+  try {
+    await Promise.allSettled([refreshUrlPluginsAuto(), refreshAllSubscriptionsAuto()]);
+    await registerAllUserScripts();
+  } finally {
+    autoRefreshing = false;
+  }
+}
+
 // Update when tab changes
-chrome.tabs.onActivated.addListener(() => {
-  void updateBadgeForActiveTab();
+chrome.tabs.onActivated.addListener(async () => {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs && tabs[0];
+    const url = tab?.url || "";
+    void maybeRefreshForUrl(url);
+  } finally {
+    void updateBadgeForActiveTab();
+  }
 });
 
-chrome.tabs.onUpdated.addListener((_tabId, changeInfo) => {
+chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
   if (changeInfo.url || changeInfo.status === "complete") {
+    const url = tab?.url || changeInfo.url || "";
+    void maybeRefreshForUrl(url);
     void updateBadgeForActiveTab();
   }
 });

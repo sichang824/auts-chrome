@@ -1,5 +1,5 @@
 import { LOCAL_KEYS } from "../lib/types";
-import type { ServerSubscription, ServerScript } from "../lib/types";
+import type { ServerSubscription, ServerScript } from "@/extension/types";
 
 export const AUTS_SUBSCRIPTIONS_KEY = LOCAL_KEYS.SUBSCRIPTIONS;
 
@@ -101,7 +101,7 @@ export async function updateSubscription(subscriptionId: string): Promise<Server
   const subscriptionUrl = `${existing.serverBase}/subscription?license=${existing.licenseKey}`;
   
   try {
-    const response = await fetch(subscriptionUrl);
+    const response = await fetch(subscriptionUrl, { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`Failed to update subscription: ${response.statusText}`);
     }
@@ -122,20 +122,49 @@ export async function updateSubscription(subscriptionId: string): Promise<Server
         };
       });
 
+    // Determine if scripts actually changed to avoid needless writes
+    const serialize = (arr: ServerScript[]) =>
+      arr
+        .slice()
+        .sort((a, b) => a.id.localeCompare(b.id))
+        .map((s) => `${s.id}@${s.version}|${s.enabled ? 1 : 0}|${s.code.length}`)
+        .join("#");
+
+    const prevKey = serialize(existing.scripts || []);
+    const nextKey = serialize(scripts);
+
     const updatedSubscription: ServerSubscription = {
       ...existing,
       scripts,
       lastUpdated: Date.now(),
     };
 
-    subscriptions[index] = updatedSubscription;
-    await saveAllSubscriptions(subscriptions);
-    
-    return updatedSubscription;
+    if (prevKey !== nextKey) {
+      subscriptions[index] = updatedSubscription;
+      await saveAllSubscriptions(subscriptions);
+    }
+    return prevKey !== nextKey ? updatedSubscription : existing;
   } catch (error) {
     console.error("Error updating subscription:", error);
     throw error;
   }
+}
+
+/**
+ * Refresh all enabled subscriptions. If any update fails, keep old data.
+ */
+export async function refreshAllSubscriptionsAuto(): Promise<void> {
+  const subscriptions = await getAllSubscriptions();
+  for (const sub of subscriptions) {
+    if (!sub.enabled) continue;
+    try {
+      const updated = await updateSubscription(sub.id);
+      void updated; // no-op to satisfy analyzer; saving handled inside updateSubscription
+    } catch (_e) {
+      // keep old subscription on failure
+    }
+  }
+  // No need to rewrite here; updateSubscription handled saving when changed
 }
 
 /**

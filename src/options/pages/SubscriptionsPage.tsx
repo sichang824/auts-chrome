@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AddServerDialog, type AddSubscriptionPayload } from "./AddServerDialog";
-import type { ServerSubscription } from "@/lib/types";
+import type { ServerSubscription } from "@/extension/types";
 import { toast } from "sonner";
 
 export function SubscriptionsPage(props: {

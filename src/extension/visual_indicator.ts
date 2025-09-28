@@ -1,4 +1,4 @@
-import type { UserScript } from "./script_storage";
+import type { UserScript } from "./types";
 
 export async function isVisualIndicatorEnabled(): Promise<boolean> {
   try {
@@ -25,14 +25,14 @@ export async function registerIndicatorForScript(
     const code = getIndicatorCode();
     // eslint-disable-next-line no-console
     console.log("[Indicator] Registering for:", script.name, {
-      matches: script.matches,
-      excludes: script.excludes || [],
+      matches: script.metadata.matches,
+      excludes: script.metadata.excludes || [],
     });
     await chrome.userScripts.register([
       {
         id: indicatorId,
-        matches: script.matches,
-        excludeMatches: script.excludes || [],
+        matches: script.metadata.matches,
+        excludeMatches: script.metadata.excludes || [],
         js: [{ code }],
         runAt: "document_idle",
         // For chrome.userScripts, valid worlds are MAIN and USER_SCRIPT

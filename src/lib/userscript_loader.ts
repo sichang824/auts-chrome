@@ -1,4 +1,5 @@
-import { parseUserScriptMeta, type UserscriptMeta } from "./userscript_parser";
+import { parseUserScriptMeta } from "./userscript_parser";
+import type { UserscriptMeta } from "@/extension/types";
 
 export interface JsSource {
   code: string;

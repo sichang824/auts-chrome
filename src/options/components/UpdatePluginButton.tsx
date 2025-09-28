@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import type { Plugin } from "../store";
+import type { AutsPlugin as Plugin } from "@/extension/types";
 import { readState, upsertScript, writeScripts } from "../store";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -119,9 +119,7 @@ async function refreshServer(
     const pkg = await resp.json();
     let code = "";
     if (typeof pkg.codeBase64 === "string") {
-      try {
-        code = atob(pkg.codeBase64);
-      } catch {}
+      code = atob(pkg.codeBase64);
     } else if (typeof pkg.code === "string") {
       code = String(pkg.code);
     }

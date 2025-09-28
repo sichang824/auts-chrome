@@ -15,7 +15,8 @@ import {
 } from "./pages/AddServerDialog";
 import { SettingsPage } from "./pages/Settings";
 import { Toaster, toast } from "sonner";
-import type { AutsState, Plugin, ThemeMode } from "./store";
+import type { AutsState } from "./store";
+import type { AutsPlugin as Plugin, ThemeMode } from "@/extension/types";
 import {
   readState,
   removeScriptById,
@@ -23,6 +24,20 @@ import {
   writeScripts,
   writeSync,
 } from "./store";
+import { parseUserScriptMeta } from "@/lib/userscript_parser";
+import {
+  toggleSubscriptionScript,
+  addSubscription,
+} from "@/extension/subscription_storage";
+import {
+  Puzzle,
+  Settings as SettingsIcon,
+  Code2,
+  Github,
+  ExternalLink,
+  ChevronRight,
+  Server,
+} from "lucide-react";
 
 // IndexedDB helpers for file handles
 const DB_NAME = "auts-file-handles";
@@ -102,15 +117,6 @@ const processDirectory = async (
     }
   }
 };
-import {
-  Puzzle,
-  Settings as SettingsIcon,
-  Code2,
-  Github,
-  ExternalLink,
-  ChevronRight,
-  Server,
-} from "lucide-react";
 
 type Route =
   | { name: "plugins" }
@@ -252,14 +258,10 @@ function OptionsApp() {
       console.warn("[Options] Failed to fetch URL script:", href, e);
     }
 
-    const meta = (await import("@/lib/userscript_parser")).parseUserScriptMeta(
-      fetchedText || ""
-    );
+    const meta = parseUserScriptMeta(fetchedText || "");
 
-    const matchesFromText = (payload.matchesText || "")
-      .split(/\n/g)
-      .map((s) => s.trim())
-      .filter(Boolean);
+    // matches are parsed from metadata inside code; optional UI input no longer used
+    void payload.matchesText;
 
     const id = `url-${Date.now()}`;
     const plugin: Plugin = {
@@ -268,10 +270,12 @@ function OptionsApp() {
       enabled: true,
       sourceType: "url",
       url: { href, etag },
+      cache: fetchedText
+        ? { code: fetchedText, etag, lastFetchedAt: Date.now() }
+        : undefined,
       version: payload.version || meta.version,
       description: payload.description || meta.description,
       author: payload.author || meta.author,
-      matches: matchesFromText.length > 0 ? matchesFromText : meta.matches,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -330,7 +334,6 @@ function OptionsApp() {
           file.name.replace(/\.(ts|tsx|js|jsx|mjs|cjs|json)$/i, ""),
         enabled: true,
         sourceType: "local",
-        matches: metadata?.matches || ["*://*/*"],
         version: metadata?.version,
         description: metadata?.description,
         author: metadata?.author,
@@ -400,7 +403,6 @@ function OptionsApp() {
           file.name.replace(/\.(ts|tsx|js|jsx|mjs|cjs|json)$/i, ""),
         enabled: true,
         sourceType: "local",
-        matches: metadata?.matches || ["*://*/*"],
         version: metadata?.version,
         description: metadata?.description,
         author: metadata?.author,
@@ -433,29 +435,47 @@ function OptionsApp() {
     // Check if this is a subscription script
     if (p.cache?.subscriptionId && p.server?.scriptId) {
       try {
-        const { toggleSubscriptionScript } = await import("@/extension/subscription_storage");
-        await toggleSubscriptionScript(p.cache.subscriptionId, p.server.scriptId);
-        
+        await toggleSubscriptionScript(
+          p.cache.subscriptionId,
+          p.server.scriptId
+        );
+
         // Reload state to reflect changes
         const updatedState = await readState();
         setState(updatedState);
-        chrome.runtime.sendMessage({ type: "STATE_CHANGED", source: "options" });
+        chrome.runtime.sendMessage({
+          type: "STATE_CHANGED",
+          source: "options",
+        });
         return;
       } catch (error) {
         console.error("Failed to toggle subscription script:", error);
-        toast.error(`切换订阅脚本状态失败：${error instanceof Error ? error.message : '未知错误'}`);
+        toast.error(
+          `切换订阅脚本状态失败：${
+            error instanceof Error ? error.message : "未知错误"
+          }`
+        );
         return;
       }
     }
 
     // Handle regular plugins
-    const next = upsertScript(state.scripts.filter(s => !s.cache?.subscriptionId), {
-      ...p,
-      enabled,
-      updatedAt: Date.now(),
-      createdAt: p.createdAt || Date.now(),
+    const next = upsertScript(
+      state.scripts.filter((s) => !s.cache?.subscriptionId),
+      {
+        ...p,
+        enabled,
+        updatedAt: Date.now(),
+        createdAt: p.createdAt || Date.now(),
+      }
+    );
+    setState({
+      ...state,
+      scripts: [
+        ...next,
+        ...state.scripts.filter((s) => s.cache?.subscriptionId),
+      ],
     });
-    setState({ ...state, scripts: [...next, ...state.scripts.filter(s => s.cache?.subscriptionId)] });
     writeScripts(next).then(() => {
       // Broadcast state change to other extension contexts
       chrome.runtime.sendMessage({ type: "STATE_CHANGED", source: "options" });
@@ -474,9 +494,17 @@ function OptionsApp() {
     }
 
     // Handle regular plugins
-    const regularScripts = state.scripts.filter(s => !s.cache?.subscriptionId);
+    const regularScripts = state.scripts.filter(
+      (s) => !s.cache?.subscriptionId
+    );
     const next = removeScriptById(regularScripts, id);
-    setState({ ...state, scripts: [...next, ...state.scripts.filter(s => s.cache?.subscriptionId)] });
+    setState({
+      ...state,
+      scripts: [
+        ...next,
+        ...state.scripts.filter((s) => s.cache?.subscriptionId),
+      ],
+    });
     writeScripts(next).then(() => {
       // Broadcast state change to other extension contexts
       chrome.runtime.sendMessage({ type: "STATE_CHANGED", source: "options" });
@@ -602,18 +630,19 @@ function OptionsApp() {
 
   const createFromSubscription = async (payload: AddSubscriptionPayload) => {
     try {
-      const { addSubscription } = await import("@/extension/subscription_storage");
       await addSubscription(payload.subscriptionUrl, payload.name);
-      
+
       // Reload state to show new subscription
       const updatedState = await readState();
       setState(updatedState);
-      
+
       chrome.runtime.sendMessage({ type: "STATE_CHANGED", source: "options" });
       toast.success("订阅添加成功！");
     } catch (error) {
       console.error("Failed to add subscription:", error);
-      toast.error(`添加订阅失败：${error instanceof Error ? error.message : '未知错误'}`);
+      toast.error(
+        `添加订阅失败：${error instanceof Error ? error.message : "未知错误"}`
+      );
     }
   };
 

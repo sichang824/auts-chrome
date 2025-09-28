@@ -25,7 +25,7 @@ import {
   Link,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { Plugin } from "../store";
+import type { AutsPlugin as Plugin } from "@/extension/types";
 import { sortByUpdatedAtDesc } from "../store";
 import { UpdatePluginButton } from "../components/UpdatePluginButton";
 import { toast } from "sonner";

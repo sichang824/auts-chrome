@@ -1,48 +1,8 @@
-export type ThemeMode = "system" | "light" | "dark";
-
-export type SourceType = "inline" | "url" | "server" | "local";
-
-export type Plugin = {
-  id: string;
-  name: string;
-  enabled: boolean;
-  sourceType: SourceType;
-  version?: string;
-  description?: string;
-  author?: string;
-  createdAt?: number;
-  updatedAt?: number;
-  homepageUrl?: string;
-  iconUrl?: string;
-  matches?: string[];
-  borderColor?: string; // Visual indicator border color
-  inline?: { content: string };
-  url?: { href: string; etag?: string } | string;
-  server?: { scriptId: string; licenseKey?: string };
-  local?: {
-    // 方式1: 上传模式（原有）
-    files?: { [path: string]: string }; // 文件路径 -> 文件内容
-    entryFile: string; // 入口文件路径，如 "auts.tsx"
-    isDirectory: boolean; // 是否为目录模式
-
-    // 方式2: 关联模式（新增）
-    linkedPath?: string; // 关联的本地文件/目录路径
-    isLinked?: boolean; // 是否为关联模式
-    lastModified?: number; // 最后修改时间，用于检测文件变化
-  };
-  cache?: {
-    version?: string;
-    etag?: string;
-    sha256?: string;
-    signature?: string;
-    lastFetchedAt?: number;
-    expiresAt?: number;
-    // For subscription scripts
-    subscriptionId?: string;
-    subscriptionName?: string;
-    serverBase?: string;
-  };
-};
+import type {
+  ThemeMode,
+  AutsPlugin as Plugin,
+  SourceType,
+} from "@/extension/types";
 
 export type AutsState = {
   autsEnabled: boolean;
@@ -58,6 +18,7 @@ const SYNC_DEFAULTS = {
   auts_server: undefined as string | undefined,
   auts_theme: "system" as ThemeMode,
   auts_visual_indicator: false as boolean,
+  auts_auto_update: true as boolean,
 };
 
 const LOCAL_DEFAULTS = {
@@ -105,6 +66,7 @@ export async function writeSync(
     auts_server?: string;
     auts_theme: ThemeMode;
     auts_visual_indicator: boolean;
+    auts_auto_update: boolean;
   }>
 ): Promise<void> {
   await new Promise<void>((resolve) =>

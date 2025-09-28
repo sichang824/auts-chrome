@@ -1,15 +1,5 @@
 // Userscript metadata parser
-
-export interface UserscriptMeta {
-  matches: string[];
-  excludes: string[];
-  grants?: string[];
-  requires?: string[];
-  name?: string;
-  version?: string;
-  description?: string;
-  author?: string;
-}
+import type { UserscriptMeta } from "@/extension/types";
 
 /**
  * Parse the UserScript metadata block from code.

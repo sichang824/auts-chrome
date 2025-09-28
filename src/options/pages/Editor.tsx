@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { Plugin } from "../store";
+import type { AutsPlugin as Plugin } from "@/extension/types";
 import { nowMs } from "../store";
 import { parseUserScriptMeta } from "@/lib/userscript_parser";
 import { normalizePatterns } from "@/lib/url_matcher";
@@ -125,13 +125,13 @@ export function EditorPage(props: {
       .map((s) => s.trim())
       .filter(Boolean));
     const effectiveMatches = normalizePatterns(effectiveMatchesRaw);
+    void effectiveMatches;
     const next: Plugin = {
       ...plugin,
       name: name.trim() || plugin.name,
       version: version.trim() || undefined,
       homepageUrl: homepageUrl.trim() || undefined,
       inline: { content },
-      matches: effectiveMatches,
       updatedAt: nowMs(),
       createdAt: plugin.createdAt || nowMs(),
     };

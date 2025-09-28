@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import type { Plugin } from "../store";
+import type { AutsPlugin as Plugin } from "@/extension/types";
 import { 
   ArrowLeft, 
   Edit3, 
