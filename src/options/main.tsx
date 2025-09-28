@@ -164,8 +164,8 @@ function OptionsApp() {
 
     // Listen for messages from other parts of the extension
     const messageListener = (message: any) => {
-      if (message.type === "STATE_CHANGED" && message.source !== "options") {
-        // Reload state when changes are broadcast from popup or other sources
+      if (message.type === "STATE_CHANGED") {
+        // Reload state when any state change is broadcast (including from this page)
         loadState();
       }
     };

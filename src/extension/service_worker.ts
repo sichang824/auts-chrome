@@ -6,8 +6,8 @@ import {
   getAllAutsPlugins,
   toggleScript as toggleScriptStorage,
   updateScript,
-  refreshUrlPluginsAuto,
 } from "./script_storage";
+import { refreshUrlPluginsAuto } from "./plugin_updater";
 import type { UserScript } from "./types";
 import { urlMatches } from "../lib/url_matcher";
 import { buildJsSourcesFromUserScript } from "../lib/userscript_loader";

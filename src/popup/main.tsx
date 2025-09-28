@@ -63,8 +63,10 @@ function PopupApp() {
       ]).then(([autsEnabled, scripts, activeUrl, userScriptsAvailable]) => {
         // Filter scripts that match current page
         const matchingScripts = (Array.isArray(scripts) ? scripts : []).filter((script: any) => {
-          if (!script?.matches || !script.matches.length) return false;
-          return urlMatches(activeUrl, script.matches, script.excludes || []);
+          const matches = script?.metadata?.matches || [];
+          const excludes = script?.metadata?.excludes || [];
+          if (!Array.isArray(matches) || matches.length === 0) return false;
+          return urlMatches(activeUrl, matches, excludes);
         });
 
         // Count enabled scripts (only matching ones)

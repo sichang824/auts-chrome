@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import type { AutsPlugin as Plugin } from "@/extension/types";
 import { readState, upsertScript, writeScripts } from "../store";
+import { updateServerPlugin, updateUrlPlugin } from "@/extension/plugin_updater";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -57,33 +58,21 @@ async function refreshUrl(plugin: Plugin): Promise<void> {
     if (resp.status === 304)
       return void toast.success("已是最新", { id: tid, description: href });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const text = await resp.text();
-    const etag = resp.headers.get("ETag") || undefined;
-    const meta = (await import("@/lib/userscript_parser")).parseUserScriptMeta(
-      text || ""
-    );
-
-    const state = await readState();
-    const updated: Plugin = {
-      ...plugin,
-      name: plugin.name || meta.name || plugin.id,
-      version: plugin.version || meta.version,
-      description: plugin.description || meta.description,
-      author: plugin.author || meta.author,
-      matches:
-        plugin.matches && plugin.matches.length > 0
-          ? plugin.matches
-          : meta.matches,
-      url: typeof plugin.url === "string" ? href : { href, etag },
-      updatedAt: Date.now(),
-    };
-    const nextList = upsertScript(state.scripts, updated);
-    await writeScripts(nextList);
-    chrome.runtime.sendMessage({ type: "STATE_CHANGED", source: "options" });
-    toast.success("更新完成", {
-      id: tid,
-      description: updated.name || plugin.id,
-    });
+    const updated = await updateUrlPlugin(plugin);
+    if (updated) {
+      const state = await readState();
+      const regular = state.scripts.filter((s) => !s.cache?.subscriptionId);
+      const nextList = upsertScript(regular, updated);
+      await writeScripts(nextList);
+      chrome.runtime.sendMessage({ type: "STATE_CHANGED", source: "options" });
+      toast.success("更新完成", {
+        id: tid,
+        description: updated.name || plugin.id,
+      });
+    } else {
+      toast.success("已是最新", { id: tid, description: href });
+    }
+    return;
   } catch (e) {
     toast.error("更新失败", { id: tid, description: href });
   }
@@ -96,67 +85,28 @@ async function refreshServer(
   if (!plugin.server?.scriptId) return;
   const base = serverBase || "";
   if (!base) return void toast.error("未配置服务器地址");
-  const url = `${base.replace(/\/$/, "")}/scripts/${encodeURIComponent(
-    plugin.server.scriptId
-  )}`;
-  const qs = new URLSearchParams();
-  if (plugin.server.licenseKey) qs.set("license", plugin.server.licenseKey);
-  const fullUrl = qs.toString() ? `${url}?${qs}` : url;
-  const headers: Record<string, string> = {};
-  if (plugin.cache?.etag) headers["If-None-Match"] = plugin.cache.etag;
   const tid = toast.loading("更新中...", {
     description: plugin.server.scriptId,
   });
   try {
-    const resp = await fetch(fullUrl, { cache: "no-store", headers });
-    if (resp.status === 304)
-      return void toast.success("已是最新", {
-        id: tid,
-        description: plugin.server.scriptId,
-      });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const etag = resp.headers.get("ETag") || undefined;
-    const pkg = await resp.json();
-    let code = "";
-    if (typeof pkg.codeBase64 === "string") {
-      code = atob(pkg.codeBase64);
-    } else if (typeof pkg.code === "string") {
-      code = String(pkg.code);
+    const updated = await updateServerPlugin(plugin, { serverBase: base });
+    if (updated) {
+      const state = await readState();
+      const regular = state.scripts.filter((s) => !s.cache?.subscriptionId);
+      const nextList = upsertScript(regular, updated);
+      await writeScripts(nextList);
+    } else {
+      toast.success("已是最新", { id: tid, description: plugin.server.scriptId });
+      return;
     }
-    const meta = (await import("@/lib/userscript_parser")).parseUserScriptMeta(
-      code || ""
-    );
-
-    const state = await readState();
-    const updated: Plugin = {
-      ...plugin,
-      name: plugin.name || pkg?.name || meta.name || plugin.server.scriptId,
-      version: pkg?.version || plugin.version || meta.version,
-      description: plugin.description || meta.description,
-      author: plugin.author || meta.author,
-      matches:
-        plugin.matches && plugin.matches.length > 0
-          ? plugin.matches
-          : meta.matches,
-      cache: {
-        ...plugin.cache,
-        version: pkg?.version || plugin.cache?.version,
-        etag: etag || pkg?.etag || plugin.cache?.etag,
-        sha256: pkg?.sha256 || plugin.cache?.sha256,
-        signature: pkg?.signature || plugin.cache?.signature,
-        lastFetchedAt: Date.now(),
-        expiresAt: pkg?.expiresAt || plugin.cache?.expiresAt,
-      },
-      updatedAt: Date.now(),
-    };
-
-    const nextList = upsertScript(state.scripts, updated);
-    await writeScripts(nextList);
     chrome.runtime.sendMessage({ type: "STATE_CHANGED", source: "options" });
     toast.success("更新完成", {
       id: tid,
       description: updated.name || plugin.server.scriptId,
     });
+    try {
+      window.location.reload();
+    } catch {}
   } catch (e) {
     toast.error("更新失败", { id: tid, description: plugin.server.scriptId });
   }
