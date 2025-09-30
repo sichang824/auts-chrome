@@ -14,6 +14,7 @@ help: ## Show this help message
 	@$(MAKE) -s help-section SECTION="📦 Package Management" PATTERN="install|add|add-dev|shadcn-init|shadcn-add"
 	@$(MAKE) -s help-section SECTION="🧹 Utilities" PATTERN="clean"
 	@$(MAKE) -s help-section SECTION="🧪 Testing" PATTERN="test"
+	@$(MAKE) -s help-section SECTION="🎭 Playwright" PATTERN="pw-.*"
 
 help-section:
 	@echo ""
@@ -81,4 +82,20 @@ clean: ## Clean Chrome Extension build cache
 test: ## Run Chrome Extension tests (placeholder)
 	@echo "No tests configured yet."
 
+
+
+# ===========================================
+# 🧪 Playwright Launcher
+# ===========================================
+
+.PHONY: pw-install pw-build pw-run
+
+pw-install: install ## Install Playwright browsers (Chromium)
+	@npx playwright install chromium
+
+pw-build: ## Build extension to project root dist/extension via parent Makefile
+	@$(MAKE) -C .. extension-build
+
+pw-run: pw-build ## Launch Chromium with the built extension via Playwright script
+	@node $(CURDIR)/tests/pw-run-extension.mjs
 
