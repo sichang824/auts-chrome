@@ -11,6 +11,7 @@ function buildMetadataFromCode(code: string): UserscriptMeta {
   return {
     matches: Array.isArray(meta.matches) ? meta.matches : [],
     excludes: Array.isArray(meta.excludes) ? meta.excludes : [],
+    connects: Array.isArray(meta.connects) ? meta.connects : [],
     grants: Array.isArray(meta.grants) ? meta.grants : [],
     requires: Array.isArray(meta.requires) ? meta.requires : [],
     name: meta.name,

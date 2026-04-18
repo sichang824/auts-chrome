@@ -13,6 +13,7 @@ export function parseUserScriptMeta(code: string): UserscriptMeta {
 
     const matches: string[] = [];
     const excludes: string[] = [];
+    const connects: string[] = [];
     const grants: string[] = [];
     const requires: string[] = [];
     let name: string | undefined;
@@ -37,6 +38,9 @@ export function parseUserScriptMeta(code: string): UserscriptMeta {
         case "exclude-match":
           excludes.push(value);
           break;
+        case "connect":
+          connects.push(value);
+          break;
         case "grant":
           grants.push(value);
           break;
@@ -58,7 +62,7 @@ export function parseUserScriptMeta(code: string): UserscriptMeta {
       }
     }
 
-    return { matches, excludes, grants, requires, name, version, description, author };
+    return { matches, excludes, connects, grants, requires, name, version, description, author };
   } catch {
     return { matches: [], excludes: [] };
   }

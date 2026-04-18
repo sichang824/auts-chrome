@@ -105,7 +105,15 @@ document.body.appendChild(counter);
 - `GM_setValue(key, value)` - 存储值
 - `GM_deleteValue(key)` - 删除存储的值
 - `GM_info` - 脚本信息对象
-- `GM_xmlhttpRequest(details)` - 发送 HTTP 请求（基础功能）
+- `GM_xmlhttpRequest(details)` - 通过扩展后台代理发送 HTTP 请求
+- `GM.xmlHttpRequest(details)` - Promise 风格的请求接口
+
+### `GM_xmlhttpRequest` / `@connect`
+
+- 需要在脚本头部显式声明 `@grant GM_xmlhttpRequest` 或 `@grant GM.xmlHttpRequest`
+- 跨域请求需要通过 `@connect` 声明允许的目标，例如 `@connect api.example.com`
+- `@connect *` 允许任意目标
+- 未声明 `@connect` 时，仅允许与当前页面同源的请求
 
 ## 文件结构
 

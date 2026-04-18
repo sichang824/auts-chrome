@@ -7,6 +7,7 @@ export type SourceType = "inline" | "url" | "server" | "local";
 export interface UserscriptMeta {
   matches: string[];
   excludes: string[];
+  connects?: string[];
   grants?: string[];
   requires?: string[];
   name?: string;
