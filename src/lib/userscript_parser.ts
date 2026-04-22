@@ -17,6 +17,7 @@ export function parseUserScriptMeta(code: string): UserscriptMeta {
     const grants: string[] = [];
     const requires: string[] = [];
     let name: string | undefined;
+    let namespace: string | undefined;
     let version: string | undefined;
     let description: string | undefined;
     let author: string | undefined;
@@ -50,6 +51,9 @@ export function parseUserScriptMeta(code: string): UserscriptMeta {
         case "name":
           name = value;
           break;
+        case "namespace":
+          namespace = value;
+          break;
         case "version":
           version = value;
           break;
@@ -62,7 +66,7 @@ export function parseUserScriptMeta(code: string): UserscriptMeta {
       }
     }
 
-    return { matches, excludes, connects, grants, requires, name, version, description, author };
+    return { matches, excludes, connects, grants, requires, name, namespace, version, description, author };
   } catch {
     return { matches: [], excludes: [] };
   }

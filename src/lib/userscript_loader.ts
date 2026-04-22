@@ -50,6 +50,7 @@ function buildWrapperPrelude(
   const scriptName = JSON.stringify(script.name || script.id);
   const scriptMeta = JSON.stringify({
     name: script.metadata?.name || script.name || script.id,
+    namespace: script.metadata?.namespace,
     version: script.metadata?.version,
     description: script.metadata?.description,
     author: script.metadata?.author,
@@ -58,6 +59,16 @@ function buildWrapperPrelude(
     connects: script.metadata?.connects || [],
     grants: script.metadata?.grants || [],
   });
+  const runtimeMeta = JSON.stringify({
+    id: script.id,
+    name: script.metadata?.name || script.name || script.id,
+    namespace: script.metadata?.namespace,
+    version: script.metadata?.version,
+    buildVersion: script.metadata?.version,
+    description: script.metadata?.description,
+    author: script.metadata?.author,
+    scriptHandler: "AUTS",
+  });
   const nonce = JSON.stringify(bridgeNonce);
   const enabled = JSON.stringify(hasGmXmlHttpRequest);
 
@@ -65,12 +76,28 @@ function buildWrapperPrelude(
 (function() {
   const __AUTS_SCRIPT_ID__ = ${scriptId};
   const __AUTS_SCRIPT_NAME__ = ${scriptName};
+  const __AUTS_SCRIPT_META__ = ${scriptMeta};
+  const __AUTS_RUNTIME_META__ = ${runtimeMeta};
+  const __AUTS_GLOBAL__ = typeof globalThis !== "undefined" ? globalThis : window;
+  const __AUTS_EXISTING_USERSCRIPT__ =
+    __AUTS_GLOBAL__.__AUTS_USERSCRIPT__ && typeof __AUTS_GLOBAL__.__AUTS_USERSCRIPT__ === "object"
+      ? __AUTS_GLOBAL__.__AUTS_USERSCRIPT__
+      : {};
   const __AUTS_GM_NONCE__ = ${nonce};
   const __AUTS_GM_ENABLED__ = ${enabled};
   const __AUTS_GM_INFO__ = {
     scriptHandler: "AUTS",
     version: "0.1.0",
-    script: ${scriptMeta}
+    script: __AUTS_SCRIPT_META__
+  };
+  __AUTS_GLOBAL__.__AUTS_USERSCRIPT__ = {
+    ...__AUTS_EXISTING_USERSCRIPT__,
+    ...__AUTS_RUNTIME_META__,
+    script: __AUTS_SCRIPT_META__,
+    GM_info: __AUTS_GM_INFO__
+  };
+  __AUTS_GLOBAL__.auts = function() {
+    return __AUTS_GLOBAL__.__AUTS_USERSCRIPT__;
   };
   const __AUTS_PENDING_REQUESTS__ = new Map();
 

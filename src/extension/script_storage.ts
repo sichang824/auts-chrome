@@ -15,6 +15,7 @@ function buildMetadataFromCode(code: string): UserscriptMeta {
     grants: Array.isArray(meta.grants) ? meta.grants : [],
     requires: Array.isArray(meta.requires) ? meta.requires : [],
     name: meta.name,
+    namespace: meta.namespace,
     version: meta.version,
     description: meta.description,
     author: meta.author,

@@ -11,6 +11,7 @@ export interface UserscriptMeta {
   grants?: string[];
   requires?: string[];
   name?: string;
+  namespace?: string;
   version?: string;
   description?: string;
   author?: string;
