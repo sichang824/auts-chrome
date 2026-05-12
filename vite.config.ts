@@ -6,10 +6,17 @@ import { defineConfig } from "vite";
 
 // https://vite.dev/config/
 const rootDir = fileURLToPath(new URL(".", import.meta.url));
+const bundledScriptUrls = parseBundledScriptUrls(process.env.AUTS_BUNDLED_SCRIPT_URLS || "");
+console.log(
+  `[AUTS build] bundled URL scripts: ${bundledScriptUrls.length > 0 ? `${bundledScriptUrls.length} enabled` : "disabled"}`
+);
 
 export default defineConfig({
   base: "./",
   plugins: [react(), tailwindcss()],
+  define: {
+    __AUTS_BUNDLED_SCRIPT_URLS__: JSON.stringify(bundledScriptUrls),
+  },
   resolve: {
     alias: {
       "@": resolve(rootDir, "src"),
@@ -38,3 +45,21 @@ export default defineConfig({
     },
   },
 });
+
+function parseBundledScriptUrls(value: string): string[] {
+  const seen = new Set<string>();
+  const urls: string[] = [];
+  for (const rawEntry of value.split(/[\n,;]/)) {
+    const entry = rawEntry.trim();
+    if (!entry || entry.startsWith("#")) continue;
+    try {
+      const href = new URL(entry).href;
+      if (seen.has(href)) continue;
+      seen.add(href);
+      urls.push(href);
+    } catch {
+      console.warn(`[AUTS build] Ignoring invalid AUTS_BUNDLED_SCRIPT_URLS entry: ${entry}`);
+    }
+  }
+  return urls;
+}

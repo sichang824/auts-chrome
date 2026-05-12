@@ -18,6 +18,7 @@ import {
   performEmergencyStop,
 } from "./visual_indicator";
 import { refreshAllSubscriptionsAuto } from "./subscription_storage";
+import { seedBundledUrlScripts } from "./bundled_url_scripts";
 
 // Track registered userscripts
 const registeredScripts: Map<string, string> = new Map();
@@ -210,6 +211,14 @@ async function registerAllUserScripts(): Promise<void> {
       return;
     }
     registering = true;
+    await seedBundledUrlScripts();
+    if (!chrome.userScripts?.unregister || !chrome.userScripts?.register) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[Register] chrome.userScripts is unavailable. Enable the extension's Allow User Scripts toggle in Chrome."
+      );
+      return;
+    }
     await chrome.userScripts.unregister();
     registeredScripts.clear();
 
